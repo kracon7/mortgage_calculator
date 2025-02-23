@@ -179,16 +179,56 @@ def calculate_mortgage_ear(number_of_payments, total_interest, total_principal):
 
     return ear
 
+
+def calculate_profit(
+        down_amount,
+        loan_amount,
+        monthly_amount_paid,
+        remaining_balance,
+        adjusted_monthly_amount_paid,
+        adjusted_remaining_balance,
+        cap_return_rate,
+        rs_return_rate,
+        effective_rent
+):
+    monthly_cap_return_rate = cap_return_rate / 12
+    monthly_rs_return_rate = rs_return_rate / 12
+    house_price = down_amount + loan_amount
+    number_of_payment = len(monthly_amount_paid)
+
+    asset_cap_list, asset_rs_list = [down_amount], [down_amount]
+    adjusted_asset_cap_list, adjusted_asset_rs_list = [down_amount], [down_amount]
+
+    for i in range(number_of_payment):
+        asset_cap = asset_cap_list[-1] * (1 + monthly_cap_return_rate) + monthly_amount_paid[i] - effective_rent
+        asset_rs = house_price * (1 + monthly_rs_return_rate) ** i - remaining_balance[i]
+        asset_cap_list.append(asset_cap)
+        asset_rs_list.append(asset_rs)
+
+        adjusted_asset_cap = adjusted_asset_cap_list[-1] * (1 + monthly_cap_return_rate) + adjusted_monthly_amount_paid[i] - effective_rent
+        adjusted_asset_rs = house_price * (1 + monthly_rs_return_rate) ** i - adjusted_remaining_balance[i]
+        adjusted_asset_cap_list.append(adjusted_asset_cap)
+        adjusted_asset_rs_list.append(adjusted_asset_rs)
+    
+    return (
+        asset_cap_list, 
+        asset_rs_list,
+        adjusted_asset_cap_list,
+        adjusted_asset_rs_list
+    )
+
+
 def calculate_mortgage():
     """Calculates mortgage and updates GUI with results and plot."""
     try:
+        down_amount = float(down_entry.get())
         loan_amount = float(loan_entry.get())
         monthly_interest_rate = float(interest_entry.get()) / 100 / 12
         number_of_payments = int(term_entry.get()) * 12
         number_of_early_payments = int(early_term_entry.get()) * 12
         monthly_early_payments = float(early_amount_entry.get())
-        cap_return_rate = float(capital_return_entry.get())
-        rs_return_rate = float(real_estate_return_entry.get())
+        cap_return_rate = float(capital_return_entry.get()) / 100
+        rs_return_rate = float(real_estate_return_entry.get()) / 100
         effective_rent = float(effective_rent_entry.get())
         
         # Calculate monthly payment
@@ -252,7 +292,7 @@ def calculate_mortgage():
 
         canvas_1 = FigureCanvasTkAgg(figure, master=root)
         canvas_1.draw()
-        canvas_1.get_tk_widget().grid(row=7, column=0, columnspan=2)
+        canvas_1.get_tk_widget().grid(row=8, column=0, columnspan=2)
 
         figure = plt.Figure(figsize=(4, 3), dpi=400)
         ax = figure.add_subplot(111)
@@ -276,7 +316,7 @@ def calculate_mortgage():
 
         canvas_2 = FigureCanvasTkAgg(figure, master=root)
         canvas_2.draw()
-        canvas_2.get_tk_widget().grid(row=7, column=2, columnspan=2)
+        canvas_2.get_tk_widget().grid(row=8, column=2, columnspan=2)
 
         # Calculate Effective Interest Rate
         effective_number_of_payments = np.sum(np.array(adjusted_monthly_amount_paid) > 0)
@@ -290,6 +330,47 @@ def calculate_mortgage():
             txt = "Monthly payment: $ %.2fK, total payment amount: $ %.2fK" % (monthly_payment, total_amount_paid[-1])
         result_label.config(text=txt)
 
+        # Calculate sell profit vs capital profit over month
+        (asset_cap_list, 
+         asset_rs_list,
+         adjusted_asset_cap_list,
+         adjusted_asset_rs_list) = \
+        calculate_profit(
+            down_amount,
+            loan_amount,
+            monthly_amount_paid,
+            remaining_balance,
+            adjusted_monthly_amount_paid,
+            adjusted_remaining_balance,
+            cap_return_rate,
+            rs_return_rate,
+            effective_rent
+        )
+
+        # Plotting
+        figure = plt.Figure(figsize=(4, 3), dpi=400)
+        ax = figure.add_subplot(111)
+        ax.plot(asset_cap_list, label='Asset Capital k($)', color='bisque')
+        ax.plot(asset_rs_list, label='Asset Real Estate k($)', color='lightgreen')
+        if number_of_early_payments > 0:
+            ax.plot(adjusted_asset_cap_list, label='Adjusted Asset Capital k($)', color='darkorange')
+            ax.plot(adjusted_asset_rs_list, label='Adjusted Asset Real Estate k($)', color='darkgreen')
+        ax.set_xlabel("Month", fontsize="5")
+        ax.set_ylabel("Asset k($)", fontsize="5")
+        ax.tick_params(axis='x', labelsize=5)
+        ax.tick_params(axis='y', labelsize=5)
+
+        ax.grid(True, 'both')
+        ax.legend(fontsize="3", loc ="upper left")
+
+        # Enable minor ticks
+        ax.minorticks_on()
+
+        canvas_3 = FigureCanvasTkAgg(figure, master=root)
+        canvas_3.draw()
+        canvas_3.get_tk_widget().grid(row=8, column=4, columnspan=2)
+    
+
     except ValueError:
         result_label.config(text="Invalid input. Please enter numbers only.")
 
@@ -297,40 +378,47 @@ def calculate_mortgage():
 root = tk.Tk()
 root.title("Mortgage Calculator")
 
+# Down amount input
+down_label = ttk.Label(root, text="Down Amount k ($):")
+down_label.grid(row=0, column=0, padx=10, pady=10)
+down_entry = ttk.Entry(root)
+down_entry.insert(0, "500")
+down_entry.grid(row=0, column=1, padx=10, pady=10)
+
 # Loan amount input
 loan_label = ttk.Label(root, text="Loan Amount k ($):")
-loan_label.grid(row=0, column=0, padx=10, pady=10)
+loan_label.grid(row=1, column=0, padx=10, pady=10)
 loan_entry = ttk.Entry(root)
 loan_entry.insert(0, "1400")
-loan_entry.grid(row=0, column=1, padx=10, pady=10)
+loan_entry.grid(row=1, column=1, padx=10, pady=10)
 
 # Interest rate input
 interest_label = ttk.Label(root, text="Annual interest Rate (%):")
-interest_label.grid(row=1, column=0, padx=10, pady=10)
+interest_label.grid(row=2, column=0, padx=10, pady=10)
 interest_entry = ttk.Entry(root)
 interest_entry.insert(0, "5.5")
-interest_entry.grid(row=1, column=1, padx=10, pady=10)
+interest_entry.grid(row=2, column=1, padx=10, pady=10)
 
 # Loan term input
 term_label = ttk.Label(root, text="Loan Term (Years):")
-term_label.grid(row=2, column=0, padx=10, pady=10)
+term_label.grid(row=3, column=0, padx=10, pady=10)
 term_entry = ttk.Entry(root)
 term_entry.insert(0, "30")
-term_entry.grid(row=2, column=1, padx=10, pady=10)
+term_entry.grid(row=3, column=1, padx=10, pady=10)
 
 # Early payment term input
 early_term_label = ttk.Label(root, text="Early Payment Term (Years):")
-early_term_label.grid(row=3, column=0, padx=10, pady=10)
+early_term_label.grid(row=4, column=0, padx=10, pady=10)
 early_term_entry = ttk.Entry(root)
 early_term_entry.insert(0, "5")
-early_term_entry.grid(row=3, column=1, padx=10, pady=10)
+early_term_entry.grid(row=4, column=1, padx=10, pady=10)
 
 # Early payment amount input
 early_amount_label = ttk.Label(root, text="Early Payment Amount k($):")
-early_amount_label.grid(row=4, column=0, padx=10, pady=10)
+early_amount_label.grid(row=5, column=0, padx=10, pady=10)
 early_amount_entry = ttk.Entry(root)
 early_amount_entry.insert(0, "4")
-early_amount_entry.grid(row=4, column=1, padx=10, pady=10)
+early_amount_entry.grid(row=5, column=1, padx=10, pady=10)
 
 
 # capital investment return rate input
@@ -357,10 +445,10 @@ effective_rent_entry.grid(row=2, column=3, padx=10, pady=10)
 
 # Calculate button
 calculate_button = ttk.Button(root, text="Calculate", command=calculate_mortgage)
-calculate_button.grid(row=5, column=1, columnspan=2, padx=10, pady=10)
+calculate_button.grid(row=6, column=1, columnspan=2, padx=10, pady=10)
 
 # Result label
 result_label = ttk.Label(root, text="")
-result_label.grid(row=6, column=1, columnspan=2, padx=10, pady=10)
+result_label.grid(row=7, column=1, columnspan=2, padx=10, pady=10)
 
 root.mainloop()
